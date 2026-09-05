@@ -198,6 +198,22 @@ export async function createVendorBill(input: VendorBillInput): Promise<ActionRe
     return { error: "Select kiya gaya partner valid Vendor nahi hai." };
   }
 
+  // Prevent duplicate bill creation for the same Purchase Order
+  if (sourcePOId) {
+    const existingBill = await prisma.vendorBill.findFirst({
+      where: {
+        sourcePOId,
+        status: { not: BillInvoiceStatus.CANCELLED },
+      },
+      select: { billNumber: true },
+    });
+    if (existingBill) {
+      return {
+        error: `Is Purchase Order ke liye pehle se active Vendor Bill (${existingBill.billNumber}) bani hui hai. Duplicate bill create nahi ki ja sakti.`,
+      };
+    }
+  }
+
   const billNumber = await nextBillNumber();
 
   const createdBill = await prisma.$transaction(async (tx) => {
