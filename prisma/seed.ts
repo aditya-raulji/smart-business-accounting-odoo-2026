@@ -67,6 +67,7 @@ async function main() {
     { name: "Capital", type: AccountType.CAPITAL, isSystem: true },
     { name: "Sales Income", type: AccountType.INCOME, isSystem: true },
     { name: "Purchase Expense", type: AccountType.EXPENSE, isSystem: true },
+    { name: "Tax Payable", type: AccountType.LIABILITY, isSystem: true },
   ];
 
   const createdAccounts: Record<string, string> = {};

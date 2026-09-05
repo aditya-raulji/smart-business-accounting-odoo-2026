@@ -336,6 +336,7 @@ model SOLine {
   analyticAccountId String?
   qty               Decimal    @db.Decimal(15, 4)
   unitPrice         Decimal    @db.Decimal(15, 2)
+  taxRate           Decimal    @default(18) @db.Decimal(5, 2)
 }
 
 // CustomerInvoice: The invoice sent to a customer; can be linked to a Sales Order.
@@ -367,6 +368,7 @@ model InvoiceLine {
   analyticAccountId String?
   qty               Decimal         @db.Decimal(15, 4)
   unitPrice         Decimal         @db.Decimal(15, 2)
+  taxRate           Decimal         @default(18) @db.Decimal(5, 2)
 }
 
 // Payment: Records money sent (to vendor) or received (from customer).
