@@ -8,13 +8,14 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ContactEditForm } from "./ContactEditForm";
 
-export default async function ContactEditPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default async function ContactEditPage({ params }: PageProps) {
+  const { id } = await params;
   const contact = await prisma.contact.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       user: {
         select: { loginId: true, email: true },

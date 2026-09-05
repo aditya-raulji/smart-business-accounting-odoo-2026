@@ -8,14 +8,15 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { BudgetDetailClient } from "./BudgetDetailClient";
 
-export default async function BudgetDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default async function BudgetDetailPage({ params }: PageProps) {
+  const { id } = await params;
   const [budget, contacts, analyticAccounts] = await Promise.all([
     prisma.budget.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         responsible: { select: { name: true } },
         analyticAccount: { select: { name: true, type: true } },

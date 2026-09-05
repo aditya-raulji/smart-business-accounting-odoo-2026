@@ -9,13 +9,14 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { getProductCategories } from "@/lib/actions/products.actions";
 import { ProductEditForm } from "./ProductEditForm";
 
-export default async function ProductEditPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default async function ProductEditPage({ params }: PageProps) {
+  const { id } = await params;
   const [product, existingCategories] = await Promise.all([
-    prisma.product.findUnique({ where: { id: params.id } }),
+    prisma.product.findUnique({ where: { id } }),
     getProductCategories(),
   ]);
 

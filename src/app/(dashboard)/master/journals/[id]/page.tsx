@@ -8,13 +8,14 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { JournalEditForm } from "./JournalEditForm";
 
-export default async function JournalEditPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default async function JournalEditPage({ params }: PageProps) {
+  const { id } = await params;
   const [journal, accounts] = await Promise.all([
-    prisma.journal.findUnique({ where: { id: params.id } }),
+    prisma.journal.findUnique({ where: { id } }),
     prisma.chartOfAccount.findMany({
       where: { archived: false },
       orderBy: { name: "asc" },

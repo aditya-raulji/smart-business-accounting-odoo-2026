@@ -8,13 +8,14 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AccountEditForm } from "./AccountEditForm";
 
-export default async function ChartOfAccountEditPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default async function ChartOfAccountEditPage({ params }: PageProps) {
+  const { id } = await params;
   const account = await prisma.chartOfAccount.findUnique({
-    where: { id: params.id },
+    where: { id },
   });
 
   if (!account) {
