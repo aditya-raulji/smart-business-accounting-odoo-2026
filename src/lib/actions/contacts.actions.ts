@@ -77,12 +77,13 @@ function generateTempPassword(): string {
 
 // provisionContactUser: Creates (or updates) the linked CONTACT_USER for a Contact.
 // Called within createContact and updateContact to keep portal access in sync.
-// TODO(Prompt 6 or later): replace console.log with a real email/SMS send to notify the contact.
+// provisionContactUser: Creates (or updates) the linked CONTACT_USER for a Contact.
+// Called within createContact and updateContact to keep portal access in sync.
 async function provisionContactUser(contact: {
   id: string;
   name: string;
   email: string;
-}): Promise<void> {
+}): Promise<{ loginId: string; tempPassword?: string }> {
   const existingUser = await prisma.user.findFirst({
     where: { contactId: contact.id },
   });
@@ -93,7 +94,7 @@ async function provisionContactUser(contact: {
       where: { id: existingUser.id },
       data: { email: contact.email, name: contact.name },
     });
-    return;
+    return { loginId: existingUser.loginId };
   }
 
   // Provision new CONTACT_USER account
@@ -112,17 +113,26 @@ async function provisionContactUser(contact: {
     },
   });
 
-  // TODO(Prompt 6 or later): replace console.log with a real email/SMS send
   console.log("═".repeat(50));
   console.log("  CONTACT PORTAL ACCESS PROVISIONED");
   console.log(`  Contact : ${contact.name} <${contact.email}>`);
   console.log(`  Login ID: ${loginId}`);
   console.log(`  Password: ${tempPassword}`);
   console.log("═".repeat(50));
+
+  return { loginId, tempPassword };
 }
 
 // createContact: Creates a new Contact and provisions a CONTACT_USER portal login.
-export async function createContact(input: ContactInput): Promise<ActionResult> {
+export async function createContact(input: ContactInput): Promise<ActionResult & {
+  credentials?: {
+    name: string;
+    email: string;
+    loginId: string;
+    password?: string;
+    role: string;
+  };
+}> {
   const parsed = contactSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
@@ -146,10 +156,20 @@ export async function createContact(input: ContactInput): Promise<ActionResult> 
   });
 
   // Provision portal access immediately after contact creation
-  await provisionContactUser({ id: contact.id, name: contact.name, email: contact.email });
+  const prov = await provisionContactUser({ id: contact.id, name: contact.name, email: contact.email });
 
   revalidatePath("/master/contacts");
-  return { success: true, id: contact.id };
+  return {
+    success: true,
+    id: contact.id,
+    credentials: {
+      name: contact.name,
+      email: contact.email,
+      loginId: prov.loginId,
+      password: prov.tempPassword,
+      role: "CONTACT_USER",
+    },
+  };
 }
 
 // updateContact: Updates an existing Contact's fields and syncs the portal user.

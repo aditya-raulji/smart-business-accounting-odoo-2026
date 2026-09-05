@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/Button";
 import { createUserAction } from "@/lib/actions/auth.actions";
 import { Shield, AlertCircle, CheckCircle2 } from "lucide-react";
 
+import { CredentialsModal, type CredentialsData } from "@/components/ui/CredentialsModal";
+
 export default function NewUserPage() {
   const router = useRouter();
   const { data: session } = useSession();
@@ -30,15 +32,15 @@ export default function NewUserPage() {
     confirmPassword: "",
   });
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [createdCredentials, setCreatedCredentials] = useState<CredentialsData | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const role = (session?.user as any)?.role;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setSuccess(null);
     setLoading(true);
 
     if (formData.password !== formData.confirmPassword) {
@@ -55,11 +57,9 @@ export default function NewUserPage() {
     setLoading(false);
     if (res.error) {
       setError(res.error);
-    } else {
-      setSuccess(`User "${formData.name}" created successfully as ${formData.role}!`);
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 1500);
+    } else if (res.credentials) {
+      setCreatedCredentials(res.credentials);
+      setIsModalOpen(true);
     }
   }
 
@@ -90,12 +90,6 @@ export default function NewUserPage() {
           </div>
         )}
 
-        {success && (
-          <div className="mb-6 p-4 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
-            <CheckCircle2 size={16} className="shrink-0" />
-            <span>{success}</span>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <Input
@@ -176,6 +170,18 @@ export default function NewUserPage() {
           </div>
         </form>
       </Card>
+
+      {/* Credentials Modal Popup */}
+      <CredentialsModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          router.push("/dashboard");
+        }}
+        credentials={createdCredentials}
+        title="Accountant / Admin Created!"
+        subtitle="Credentials saved to system. You can now use these to sign in."
+      />
     </div>
   );
 }

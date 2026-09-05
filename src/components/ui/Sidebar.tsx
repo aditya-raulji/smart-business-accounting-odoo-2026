@@ -26,6 +26,7 @@ import {
   Layers,
   DollarSign,
   LogOut,
+  UserPlus,
 } from "lucide-react";
 
 interface NavItem {
@@ -39,8 +40,8 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// Full navigation structure per spec §4
-const ADMIN_ACCOUNTANT_NAV: NavGroup[] = [
+// Nav items shared between Admin and Accountant
+const SHARED_NAV: NavGroup[] = [
   {
     group: "Dashboard",
     items: [
@@ -85,6 +86,14 @@ const ADMIN_ACCOUNTANT_NAV: NavGroup[] = [
   },
 ];
 
+// Admin-only nav group for team & user administration
+const ADMIN_NAV_GROUP: NavGroup = {
+  group: "Administration",
+  items: [
+    { label: "User Management", href: "/users/new", icon: UserPlus },
+  ],
+};
+
 // Restricted nav for CONTACT_USER — vendor/customer self-service portal
 const CONTACT_USER_NAV: NavGroup[] = [
   {
@@ -103,7 +112,16 @@ interface SidebarProps {
 
 export function Sidebar({ role, userName }: SidebarProps) {
   const pathname = usePathname();
-  const nav = role === "CONTACT_USER" ? CONTACT_USER_NAV : ADMIN_ACCOUNTANT_NAV;
+
+  let nav: NavGroup[];
+  if (role === "CONTACT_USER") {
+    nav = CONTACT_USER_NAV;
+  } else if (role === "ADMIN") {
+    nav = [...SHARED_NAV, ADMIN_NAV_GROUP];
+  } else {
+    // ACCOUNTANT: no administration section
+    nav = SHARED_NAV;
+  }
 
   function isActive(href: string): boolean {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -130,7 +148,7 @@ export function Sidebar({ role, userName }: SidebarProps) {
         {nav.map((group) => (
           <div key={group.group} className="mb-4">
             {group.group && (
-              <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-[2px] text-[#3D3A36]">
+              <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-[2px] text-[#A8A29E]">
                 {group.group}
               </p>
             )}
@@ -157,7 +175,7 @@ export function Sidebar({ role, userName }: SidebarProps) {
         ))}
       </nav>
 
-      {/* User footer */}
+      {/* User footer with clear role badge */}
       <div className="px-4 py-4 border-t border-[#2a2a2a] flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 rounded-sm bg-[#B91C1C] flex items-center justify-center text-[#FFFDF8] text-sm font-bold shrink-0">
@@ -165,7 +183,23 @@ export function Sidebar({ role, userName }: SidebarProps) {
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-sm font-medium text-[#FFFDF8] truncate">{userName}</span>
-            <span className="text-[10px] uppercase tracking-[1px] text-[#A8A29E]">{role.replace("_", " ")}</span>
+            <div className="mt-0.5">
+              {role === "ADMIN" && (
+                <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider uppercase bg-[#B91C1C] text-white">
+                  Admin
+                </span>
+              )}
+              {role === "ACCOUNTANT" && (
+                <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  Accountant
+                </span>
+              )}
+              {role === "CONTACT_USER" && (
+                <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  Portal Partner
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <button

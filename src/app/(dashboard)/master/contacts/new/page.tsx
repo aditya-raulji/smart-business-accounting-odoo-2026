@@ -17,6 +17,8 @@ import { createContact } from "@/lib/actions/contacts.actions";
 import { ContactType } from "@prisma/client";
 import { AlertCircle, CheckCircle2, KeyRound } from "lucide-react";
 
+import { CredentialsModal, type CredentialsData } from "@/components/ui/CredentialsModal";
+
 export default function NewContactPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
@@ -33,10 +35,8 @@ export default function NewContactPage() {
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [createdCredentials, setCreatedCredentials] = useState<{
-    loginId?: string;
-    password?: string;
-  } | null>(null);
+  const [createdCredentials, setCreatedCredentials] = useState<CredentialsData | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,12 +48,9 @@ export default function NewContactPage() {
 
     if (res.error) {
       setError(res.error);
-    } else {
-      // res.id contains created contact ID
-      // Portal user credentials are created on server and logged to console per spec
-      setCreatedCredentials({
-        loginId: formData.email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10),
-      });
+    } else if (res.credentials) {
+      setCreatedCredentials(res.credentials);
+      setIsModalOpen(true);
     }
   }
 
@@ -85,16 +82,25 @@ export default function NewContactPage() {
             </div>
           </div>
 
-          <div className="p-4 rounded bg-[#F7F4EE] border border-[#E2D9CC] space-y-2">
+          <div className="p-4 rounded bg-[#F7F4EE] border border-[#E2D9CC] space-y-3">
             <div className="flex items-center gap-2 text-xs font-semibold text-[#171717]">
               <KeyRound size={15} className="text-[#B91C1C]" />
               <span>Portal Login Credentials</span>
             </div>
-            <p className="text-xs text-[#3D3A36]">
-              Login ID: <strong className="text-[#171717]">{createdCredentials.loginId}</strong> (or prefixed)
-            </p>
-            <p className="text-[11px] text-[#A8A29E]">
-              Full credentials have been logged to the server terminal per security protocol §5.
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="p-2.5 bg-white border border-[#E2D9CC] rounded-sm">
+                <span className="text-[10px] uppercase font-bold text-[#A8A29E] block mb-0.5">Login ID</span>
+                <span className="font-mono font-bold text-[#171717] select-all">{createdCredentials.loginId}</span>
+              </div>
+              {createdCredentials.password && (
+                <div className="p-2.5 bg-white border border-[#E2D9CC] rounded-sm">
+                  <span className="text-[10px] uppercase font-bold text-[#A8A29E] block mb-0.5">Password</span>
+                  <span className="font-mono font-bold text-[#B91C1C] select-all">{createdCredentials.password}</span>
+                </div>
+              )}
+            </div>
+            <p className="text-[11px] text-[#3D3A36] pt-1">
+              Yeh credentials vendor ya customer ke saath share kiye ja sakte hain portal sign-in ke liye.
             </p>
           </div>
 
@@ -219,6 +225,18 @@ export default function NewContactPage() {
           </form>
         </Card>
       )}
+
+      {/* Credentials Modal Popup */}
+      <CredentialsModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          router.push("/master/contacts");
+        }}
+        credentials={createdCredentials}
+        title="Portal Partner Provisioned!"
+        subtitle="Automatic vendor/customer portal credentials generated."
+      />
     </div>
   );
 }

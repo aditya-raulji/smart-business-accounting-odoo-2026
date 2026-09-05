@@ -13,7 +13,17 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { signupSchema, createUserSchema } from "@/lib/validations/auth";
 
-type ActionResult = { error?: string; success?: boolean };
+export type ActionResult = {
+  error?: string;
+  success?: boolean;
+  credentials?: {
+    name: string;
+    email: string;
+    loginId: string;
+    password?: string;
+    role: string;
+  };
+};
 
 // signupAction: Creates an ACCOUNTANT account from the public signup form.
 // Role is NOT taken from the form — hardcoded to ACCOUNTANT here for security.
@@ -100,5 +110,14 @@ export async function createUserAction(input: {
     },
   });
 
-  return { success: true };
+  return {
+    success: true,
+    credentials: {
+      name: input.name,
+      email: input.email,
+      loginId: input.loginId,
+      password: input.password,
+      role: input.role,
+    },
+  };
 }
