@@ -1,12 +1,23 @@
-import { PlaceholderPage } from "@/components/ui/PlaceholderPage";
+// Double-Entry Journal Entries List Page for Urban Furniture Accounting System.
+// Yeh page automatic system-posted Journal Entries fetch karke JournalEntriesTable Client Component me render karta hai.
+// Specification §2.7 Columns: Date, Number (Bill number / reference), Partner, Journal Name, Total Amount, Status (Posted).
+// Used by: /accounting/journal-entries route.
 
-export default function JournalEntriesPage() {
+import { getJournalEntries } from "@/lib/actions/journal-entries";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { JournalEntriesTable } from "@/components/accounting/JournalEntriesTable";
+
+export default async function JournalEntriesPage() {
+  const entries = await getJournalEntries();
+
   return (
-    <PlaceholderPage
-      title="Journal Entries"
-      subtitle="Balanced double-entry journal items posted across Sales, Purchase, Bank, and Cash books."
-      moduleName="Double-Entry General Ledger"
-      upcomingPrompt="Prompt 4 (Accounting Engine)"
-    />
+    <div className="space-y-6">
+      <PageHeader
+        title="Journal Entries"
+        subtitle="Read-only double-entry general ledger records auto-posted by vendor bills and payments."
+      />
+
+      <JournalEntriesTable entries={entries} />
+    </div>
   );
 }
