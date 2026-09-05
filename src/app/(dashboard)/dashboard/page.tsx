@@ -132,8 +132,18 @@ export default async function DashboardPage() {
     recentContacts,
   ] = await Promise.all([
     prisma.contact.count({ where: { archived: false } }),
-    prisma.contact.count({ where: { archived: false, type: { in: [ContactType.CUSTOMER, ContactType.BOTH] } } }),
-    prisma.contact.count({ where: { archived: false, type: { in: [ContactType.VENDOR, ContactType.BOTH] } } }),
+    prisma.contact.count({
+      where: {
+        archived: false,
+        OR: [{ type: ContactType.CUSTOMER }, { type: ContactType.BOTH }],
+      },
+    }),
+    prisma.contact.count({
+      where: {
+        archived: false,
+        OR: [{ type: ContactType.VENDOR }, { type: ContactType.BOTH }],
+      },
+    }),
     prisma.product.count({ where: { archived: false } }),
     prisma.budget.count(),
     prisma.budget.count({ where: { status: BudgetStatus.CONFIRMED } }),

@@ -186,3 +186,186 @@ export async function cancelBudget(id: string): Promise<ActionResult> {
     return { error: err instanceof Error ? err.message : "Failed to cancel budget" };
   }
 }
+
+/**
+ * getBudgetAchievedAmount: Specific Budget ke live Achieved Amount, Achieved %, aur Amount To Achieve compute karta hai.
+ * Spec §3 Formula Implementation:
+ * - If analyticAccount.type == EXPENSE: Sum of BillLine (qty * unitPrice) joined with VendorBill where status IN (CONFIRMED, PARTIALLY_PAID, PAID) and billDate within [periodStart, periodEnd].
+ * - If analyticAccount.type == INCOME: Sum of InvoiceLine (qty * unitPrice) joined with CustomerInvoice where status IN (CONFIRMED, PARTIALLY_PAID, PAID) and invoiceDate within [periodStart, periodEnd].
+ * - Achieved % = (Achieved Amount / Committed Amount) * 100
+ * - Amount To Achieve = Committed Amount - Achieved Amount
+ * Alternative Rejected: Budget row par denormalize karna — rejecting because Achieved Amount depends on a dynamic set of documents across a date range and could drift if bills/invoices are edited/cancelled. Live aggregate calculation is fast and 100% accurate.
+ * Used by: Budget detail page (/master/budgets/[id]) and Budgets list view.
+ */
+export async function getBudgetAchievedAmount(budgetId: string) {
+  const budget = await prisma.budget.findUnique({
+    where: { id: budgetId },
+    include: {
+      analyticAccount: true,
+    },
+  });
+
+  if (!budget) {
+    return {
+      achievedAmount: 0,
+      achievedPercentage: 0,
+      amountToAchieve: 0,
+      committedAmount: 0,
+    };
+  }
+
+  const committedAmount = Number(budget.committedAmount);
+  let achievedAmount = 0;
+
+  const validStatuses = ["CONFIRMED", "PARTIALLY_PAID", "PAID"];
+
+  if (budget.analyticAccount.type === "EXPENSE") {
+    const billLines = await prisma.billLine.findMany({
+      where: {
+        analyticAccountId: budget.analyticAccountId,
+        vendorBill: {
+          status: { in: validStatuses as any },
+          billDate: {
+            gte: budget.periodStart,
+            lte: budget.periodEnd,
+          },
+        },
+      },
+      select: {
+        qty: true,
+        unitPrice: true,
+      },
+    });
+
+    achievedAmount = billLines.reduce(
+      (sum, line) => sum + Number(line.qty) * Number(line.unitPrice),
+      0
+    );
+  } else if (budget.analyticAccount.type === "INCOME") {
+    const invoiceLines = await prisma.invoiceLine.findMany({
+      where: {
+        analyticAccountId: budget.analyticAccountId,
+        customerInvoice: {
+          status: { in: validStatuses as any },
+          invoiceDate: {
+            gte: budget.periodStart,
+            lte: budget.periodEnd,
+          },
+        },
+      },
+      select: {
+        qty: true,
+        unitPrice: true,
+      },
+    });
+
+    achievedAmount = invoiceLines.reduce(
+      (sum, line) => sum + Number(line.qty) * Number(line.unitPrice),
+      0
+    );
+  }
+
+  const achievedPercentage =
+    committedAmount > 0 ? (achievedAmount / committedAmount) * 100 : 0;
+  const amountToAchieve = committedAmount - achievedAmount;
+
+  return {
+    achievedAmount,
+    achievedPercentage,
+    amountToAchieve,
+    committedAmount,
+  };
+}
+
+/**
+ * getBudgetAchievedLines: Achieved Amount me contribute karne wale saare individual VendorBill lines ya CustomerInvoice lines fetch karta hai.
+ * Used by: BudgetAchievedDrilldownModal client component on /master/budgets/[id].
+ */
+export async function getBudgetAchievedLines(budgetId: string) {
+  const budget = await prisma.budget.findUnique({
+    where: { id: budgetId },
+    include: {
+      analyticAccount: true,
+    },
+  });
+
+  if (!budget) return [];
+
+  const validStatuses = ["CONFIRMED", "PARTIALLY_PAID", "PAID"];
+
+  if (budget.analyticAccount.type === "EXPENSE") {
+    const billLines = await prisma.billLine.findMany({
+      where: {
+        analyticAccountId: budget.analyticAccountId,
+        vendorBill: {
+          status: { in: validStatuses as any },
+          billDate: {
+            gte: budget.periodStart,
+            lte: budget.periodEnd,
+          },
+        },
+      },
+      include: {
+        vendorBill: {
+          select: { id: true, billNumber: true, billDate: true },
+        },
+      },
+    });
+
+    // Product names fetch karna
+    const productIds = Array.from(new Set(billLines.map((l) => l.productId)));
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, name: true },
+    });
+    const productMap = new Map(products.map((p) => [p.id, p.name]));
+
+    return billLines.map((line) => ({
+      id: line.id,
+      docNumber: line.vendorBill.billNumber,
+      docDate: line.vendorBill.billDate,
+      docLink: `/purchase/bills/${line.vendorBill.id}`,
+      productName: productMap.get(line.productId) || "—",
+      qty: Number(line.qty),
+      unitPrice: Number(line.unitPrice),
+      amount: Number(line.qty) * Number(line.unitPrice),
+    }));
+  } else {
+    const invoiceLines = await prisma.invoiceLine.findMany({
+      where: {
+        analyticAccountId: budget.analyticAccountId,
+        customerInvoice: {
+          status: { in: validStatuses as any },
+          invoiceDate: {
+            gte: budget.periodStart,
+            lte: budget.periodEnd,
+          },
+        },
+      },
+      include: {
+        customerInvoice: {
+          select: { id: true, invoiceNumber: true, invoiceDate: true },
+        },
+      },
+    });
+
+    const productIds = Array.from(new Set(invoiceLines.map((l) => l.productId)));
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, name: true },
+    });
+    const productMap = new Map(products.map((p) => [p.id, p.name]));
+
+    return invoiceLines.map((line) => ({
+      id: line.id,
+      docNumber: line.customerInvoice.invoiceNumber,
+      docDate: line.customerInvoice.invoiceDate,
+      docLink: `/sales/invoices/${line.customerInvoice.id}`,
+      productName: productMap.get(line.productId) || "—",
+      qty: Number(line.qty),
+      unitPrice: Number(line.unitPrice),
+      amount: Number(line.qty) * Number(line.unitPrice),
+    }));
+  }
+}
+

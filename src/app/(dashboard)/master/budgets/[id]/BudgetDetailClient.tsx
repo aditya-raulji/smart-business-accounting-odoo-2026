@@ -1,7 +1,6 @@
 // Budget Detail and Lifecycle Client Component for Urban Furniture Accounting System.
-// What: Interactive component managing Budget state transitions:
-//       Draft (edit/confirm/cancel) → Confirmed (locked, revise/cancel) → Revised/Cancelled.
-// Why: Enforces the budget state machine per spec §6.6 with revision lineage tracking.
+// What: Interactive component managing Budget state transitions and displaying real live Achieved Amount & Achieved % calculations.
+// Specification §2.5 & §3: Features live Achieved Amount link opening BudgetAchievedDrilldownModal listing contributing BillLine / InvoiceLine items.
 // Used by: /master/budgets/[id] page.
 
 "use client";
@@ -29,8 +28,10 @@ import {
   Check,
   ArrowRight,
   TrendingUp,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
+import { BudgetAchievedDrilldownModal } from "@/components/master/BudgetAchievedDrilldownModal";
 
 interface BudgetDetailData {
   id: string;
@@ -47,6 +48,13 @@ interface BudgetDetailData {
   revisedBy?: { id: string; name: string } | null;
 }
 
+interface AchievedMetrics {
+  achievedAmount: number;
+  achievedPercentage: number;
+  amountToAchieve: number;
+  committedAmount: number;
+}
+
 interface OptionItem {
   id: string;
   name: string;
@@ -54,10 +62,12 @@ interface OptionItem {
 
 export function BudgetDetailClient({
   budget,
+  achievedMetrics,
   contacts,
   analyticAccounts,
 }: {
   budget: BudgetDetailData;
+  achievedMetrics: AchievedMetrics;
   contacts: OptionItem[];
   analyticAccounts: OptionItem[];
 }) {
@@ -74,6 +84,9 @@ export function BudgetDetailClient({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Drilldown modal state
+  const [isDrilldownOpen, setIsDrilldownOpen] = useState(false);
 
   // Revision modal state
   const [showReviseModal, setShowReviseModal] = useState(false);
@@ -134,7 +147,6 @@ export function BudgetDetailClient({
       setError(res.error);
     } else {
       setShowReviseModal(false);
-      // Navigate to the newly spawned revision
       if (res.id) {
         router.push(`/master/budgets/${res.id}`);
       } else {
@@ -159,11 +171,12 @@ export function BudgetDetailClient({
   }
 
   const badgeInfo = statusToBadge(budget.status);
+  const isOverBudget = achievedMetrics.amountToAchieve < 0;
 
   return (
     <div className="space-y-6">
       {/* Status Bar */}
-      <div className="bg-[#FFFDF8] border border-[#E2D9CC] rounded-sm p-4 flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-[#FFFDF8] border border-[#E2D9CC] rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
         <div className="flex items-center gap-3">
           <span className="text-xs uppercase tracking-wider font-semibold text-[#3D3A36]">Status:</span>
           <Badge variant={badgeInfo.variant} label={badgeInfo.label} />
@@ -171,7 +184,7 @@ export function BudgetDetailClient({
           {budget.revisionOf && (
             <Link
               href={`/master/budgets/${budget.revisionOf.id}`}
-              className="text-xs text-[#B91C1C] hover:underline flex items-center gap-1"
+              className="text-xs text-[#B91C1C] hover:underline flex items-center gap-1 font-medium"
             >
               <GitFork size={13} />
               <span>Revision of: {budget.revisionOf.name}</span>
@@ -181,7 +194,7 @@ export function BudgetDetailClient({
           {budget.revisedBy && (
             <Link
               href={`/master/budgets/${budget.revisedBy.id}`}
-              className="text-xs text-[#B45309] hover:underline flex items-center gap-1"
+              className="text-xs text-[#B45309] hover:underline flex items-center gap-1 font-medium"
             >
               <ArrowRight size={13} />
               <span>Superseded by: {budget.revisedBy.name}</span>
@@ -241,15 +254,77 @@ export function BudgetDetailClient({
         </div>
       </div>
 
+      {/* Real Achieved Amount & Performance Dashboard Summary Card */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Committed Amount */}
+        <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-sm space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">Committed Amount</p>
+          <p className="text-xl font-bold font-mono text-[#171717]">
+            ₹{achievedMetrics.committedAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs text-stone-400">Total target allocation</p>
+        </div>
+
+        {/* Real Achieved Amount (Clickable Link!) */}
+        <div className="bg-white p-5 rounded-2xl border border-amber-200 bg-amber-50/30 shadow-sm space-y-1">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wider text-amber-800">Achieved Amount</p>
+            <button
+              onClick={() => setIsDrilldownOpen(true)}
+              className="text-xs font-semibold text-amber-800 hover:underline flex items-center gap-1"
+            >
+              Drill-down <ExternalLink className="w-3 h-3" />
+            </button>
+          </div>
+          <button
+            onClick={() => setIsDrilldownOpen(true)}
+            className="text-xl font-bold font-mono text-amber-900 hover:text-amber-700 transition-colors text-left w-full cursor-pointer flex items-center gap-2 group"
+          >
+            <span>₹{achievedMetrics.achievedAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          </button>
+          <p className="text-xs text-amber-700/80">Click value to inspect line items</p>
+        </div>
+
+        {/* Achieved % */}
+        <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-sm space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">Achieved %</p>
+            <TrendingUp className="w-4 h-4 text-stone-400" />
+          </div>
+          <p className="text-xl font-bold font-mono text-[#171717]">
+            {achievedMetrics.achievedPercentage.toFixed(1)}%
+          </p>
+          <div className="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+            <div
+              className={`h-full transition-all duration-500 ${
+                isOverBudget ? "bg-red-600" : "bg-[#171717]"
+              }`}
+              style={{ width: `${Math.min(100, achievedMetrics.achievedPercentage)}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Amount To Achieve */}
+        <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-sm space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">Amount To Achieve</p>
+          <p className={`text-xl font-bold font-mono ${isOverBudget ? "text-red-600" : "text-[#171717]"}`}>
+            ₹{achievedMetrics.amountToAchieve.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs text-stone-400">
+            {isOverBudget ? "Over budget limit!" : "Remaining buffer"}
+          </p>
+        </div>
+      </div>
+
       {error && (
-        <div className="p-4 rounded bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
           <AlertCircle size={16} className="shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {success && (
-        <div className="p-4 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
           <CheckCircle2 size={16} className="shrink-0" />
           <span>{success}</span>
         </div>
@@ -258,8 +333,8 @@ export function BudgetDetailClient({
       {/* Main Budget Card */}
       <Card className="p-8">
         {!isDraft && (
-          <div className="mb-6 p-4 rounded bg-[#171717] text-[#FFFDF8] text-xs flex items-center gap-2">
-            <Lock size={15} className="text-[#B91C1C] shrink-0" />
+          <div className="mb-6 p-4 rounded-xl bg-stone-900 text-white text-xs flex items-center gap-2">
+            <Lock size={15} className="text-amber-400 shrink-0" />
             <span>
               {isConfirmed && "This budget is Confirmed. Values are locked to preserve audit consistency. To adjust allocations, click 'Revise Budget'."}
               {isRevised && "This budget was superseded by a newer revision. Records are kept immutable."}
@@ -350,10 +425,18 @@ export function BudgetDetailClient({
         </form>
       </Card>
 
+      {/* Drill-Down Modal */}
+      <BudgetAchievedDrilldownModal
+        budgetId={budget.id}
+        budgetName={budget.name}
+        isOpen={isDrilldownOpen}
+        onClose={() => setIsDrilldownOpen(false)}
+      />
+
       {/* Revision Modal */}
       {showReviseModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#FFFDF8] border border-[#D4CCC0] rounded p-6 max-w-md w-full space-y-4 shadow-xl">
+          <div className="bg-[#FFFDF8] border border-[#D4CCC0] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-xl">
             <div className="flex items-center gap-2 text-[#171717]">
               <GitFork size={18} className="text-[#B45309]" />
               <h3 className="text-base font-semibold">Revise Budget</h3>

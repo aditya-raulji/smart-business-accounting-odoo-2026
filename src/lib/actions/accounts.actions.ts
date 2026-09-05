@@ -1,12 +1,7 @@
-// Chart of Accounts server actions for Urban Furniture Accounting System.
-// What: CRUD actions for the Chart of Accounts — create new accounts and archive existing ones.
-//       isSystem accounts (seeded) can be archived but NEVER deleted.
-// Why: System accounts are referenced by seeded Journals; deleting them would break the
-//      journal-entry double-entry system. The archive pattern keeps historical data intact
-//      while removing the account from active use.
-// Why not: Hard deletion would cascade-null journal entries referencing those accounts,
-//          corrupting existing financial records — unacceptable in any accounting system.
-// Used by: /master/chart-of-accounts pages.
+// Chart of Accounts Server Actions for Urban Furniture Accounting System.
+// Yeh file Chart of Accounts ledger database read, create, update, archive, aur unarchive karne ke actions provide karti hai.
+// Core Safety Lock: `isSystem = true` seeded default accounts ko Edit ya Archive karne se server-side strictly block kiya gaya hai.
+// Used by: /master/chart-of-accounts list page and AccountsManagementView client component.
 
 "use server";
 
@@ -14,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { AccountType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth";
 
 const accountSchema = z.object({
   name: z.string().min(1, "Account name is required"),
@@ -23,52 +19,125 @@ const accountSchema = z.object({
 type AccountInput = z.infer<typeof accountSchema>;
 type ActionResult = { error?: string; success?: boolean; id?: string };
 
-// createAccount: Adds a new ledger account to the Chart of Accounts.
-// isSystem defaults to false — only seed.ts creates system accounts.
+/**
+ * getAccounts: Chart of Accounts list fetch karta hai. By default archived accounts hide hote hain jab tak includeArchived true na ho.
+ * Used by: /master/chart-of-accounts, manual journal entry creation line dropdowns, and master setup views.
+ */
+export async function getAccounts(options?: { includeArchived?: boolean }) {
+  const includeArchived = options?.includeArchived ?? false;
+  return await prisma.chartOfAccount.findMany({
+    where: includeArchived ? {} : { archived: false },
+    orderBy: [{ isSystem: "desc" }, { name: "asc" }],
+  });
+}
+
+/**
+ * createAccount: Custom account Chart of Accounts me add karta hai.
+ * Used by: AccountsManagementView modal form.
+ */
 export async function createAccount(input: AccountInput): Promise<ActionResult> {
+  const session = await auth();
+  const user = session?.user as any;
+  if (!user || (user.role !== "ADMIN" && user.role !== "ACCOUNTANT")) {
+    return { error: "Unauthorized: Only Admin or Accountant can modify accounts." };
+  }
+
   const parsed = accountSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
-  // Check for duplicate account names (case-insensitive)
   const existing = await prisma.chartOfAccount.findFirst({
     where: { name: { equals: input.name, mode: "insensitive" }, archived: false },
   });
   if (existing) return { error: "An account with this name already exists." };
 
   const account = await prisma.chartOfAccount.create({
-    data: { name: parsed.data.name, type: parsed.data.type },
+    data: {
+      name: parsed.data.name,
+      type: parsed.data.type,
+      isSystem: false,
+    },
   });
 
   revalidatePath("/master/chart-of-accounts");
   return { success: true, id: account.id };
 }
 
-// updateAccount: Updates a non-system account's name and type.
-// System accounts' names cannot be changed (they're referenced by seeded journals).
+/**
+ * updateAccount: Non-system account ka Name aur Type update karta hai.
+ * System accounts (isSystem = true) are locked.
+ * Used by: AccountsManagementView edit modal.
+ */
 export async function updateAccount(
   id: string,
   input: AccountInput
 ): Promise<ActionResult> {
+  const session = await auth();
+  const user = session?.user as any;
+  if (!user || (user.role !== "ADMIN" && user.role !== "ACCOUNTANT")) {
+    return { error: "Unauthorized: Only Admin or Accountant can modify accounts." };
+  }
+
   const account = await prisma.chartOfAccount.findUnique({ where: { id } });
   if (!account) return { error: "Account not found." };
-  if (account.isSystem) return { error: "System accounts cannot be modified." };
+  if (account.isSystem) {
+    return { error: "System account — used by the accounting engine, cannot be changed." };
+  }
 
   const parsed = accountSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   await prisma.chartOfAccount.update({
     where: { id },
-    data: { name: parsed.data.name, type: parsed.data.type },
+    data: {
+      name: parsed.data.name,
+      type: parsed.data.type,
+    },
   });
 
   revalidatePath("/master/chart-of-accounts");
   return { success: true, id };
 }
 
-// archiveAccount: Soft-deletes an account. Works on both system and non-system accounts.
-// isSystem accounts are archiveable but not deleteable — archive just hides them from lists.
+/**
+ * archiveAccount: Soft-deletes/archives a non-system account.
+ * Used by: AccountsManagementView table action row.
+ */
 export async function archiveAccount(id: string): Promise<ActionResult> {
+  const session = await auth();
+  const user = session?.user as any;
+  if (!user || (user.role !== "ADMIN" && user.role !== "ACCOUNTANT")) {
+    return { error: "Unauthorized: Only Admin or Accountant can modify accounts." };
+  }
+
+  const account = await prisma.chartOfAccount.findUnique({ where: { id } });
+  if (!account) return { error: "Account not found." };
+  if (account.isSystem) {
+    return { error: "System account — used by the accounting engine, cannot be changed." };
+  }
+
   await prisma.chartOfAccount.update({ where: { id }, data: { archived: true } });
+  revalidatePath("/master/chart-of-accounts");
+  return { success: true };
+}
+
+/**
+ * unarchiveAccount: Restores an archived non-system account to active status.
+ * Used by: AccountsManagementView table action row.
+ */
+export async function unarchiveAccount(id: string): Promise<ActionResult> {
+  const session = await auth();
+  const user = session?.user as any;
+  if (!user || (user.role !== "ADMIN" && user.role !== "ACCOUNTANT")) {
+    return { error: "Unauthorized: Only Admin or Accountant can modify accounts." };
+  }
+
+  const account = await prisma.chartOfAccount.findUnique({ where: { id } });
+  if (!account) return { error: "Account not found." };
+  if (account.isSystem) {
+    return { error: "System account — used by the accounting engine, cannot be changed." };
+  }
+
+  await prisma.chartOfAccount.update({ where: { id }, data: { archived: false } });
   revalidatePath("/master/chart-of-accounts");
   return { success: true };
 }

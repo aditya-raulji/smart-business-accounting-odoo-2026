@@ -1,10 +1,11 @@
 // Budget detail and edit page for Urban Furniture Accounting System.
-// What: Server component loading budget record, related options, and rendering BudgetDetailClient.
-// Why: Enforces authorization, serializes Decimal figures, and resolves revision lineage.
+// What: Server component loading budget record, live Achieved Amount metrics, and rendering BudgetDetailClient.
+// Specification §2.5 & §3: Passes live Achieved Amount, Achieved %, and Amount To Achieve to BudgetDetailClient.
 // Used by: /master/budgets/[id] route.
 
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
+import { getBudgetAchievedAmount } from "@/lib/actions/budgets.actions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { BudgetDetailClient } from "./BudgetDetailClient";
 
@@ -14,7 +15,7 @@ interface PageProps {
 
 export default async function BudgetDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const [budget, contacts, analyticAccounts] = await Promise.all([
+  const [budget, achievedMetrics, contacts, analyticAccounts] = await Promise.all([
     prisma.budget.findUnique({
       where: { id },
       include: {
@@ -24,6 +25,7 @@ export default async function BudgetDetailPage({ params }: PageProps) {
         revisedBy: { select: { id: true, name: true } },
       },
     }),
+    getBudgetAchievedAmount(id),
     prisma.contact.findMany({
       where: { archived: false },
       orderBy: { name: "asc" },
@@ -47,14 +49,15 @@ export default async function BudgetDetailPage({ params }: PageProps) {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-[#4xl] max-w-4xl mx-auto space-y-6">
       <PageHeader
         title={budget.name}
-        subtitle="Fiscal budget parameters and lifecycle status tracking."
+        subtitle="Fiscal budget parameters and live performance tracking."
       />
 
       <BudgetDetailClient
         budget={serialized}
+        achievedMetrics={achievedMetrics}
         contacts={contacts}
         analyticAccounts={analyticAccounts}
       />

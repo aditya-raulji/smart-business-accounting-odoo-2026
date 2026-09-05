@@ -1,30 +1,23 @@
-// Chart of Accounts master list page for Urban Furniture Accounting System.
-// What: Server component loading active Chart of Accounts entries from PostgreSQL and rendering AccountsTable.
-// Why: Provides direct view of foundational double-entry ledger accounts.
+// Chart of Accounts Master Management Page for Urban Furniture Accounting System.
+// What: Server component loading active and archived Chart of Accounts entries from PostgreSQL and rendering AccountsManagementView.
+// Specification §2.3: Provides Edit & Archive capabilities for custom accounts with strict locks on seeded system accounts.
 // Used by: /master/chart-of-accounts route.
 
-import { prisma } from "@/lib/prisma";
+import { getAccounts } from "@/lib/actions/accounts.actions";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { AccountsTable } from "./AccountsTable";
+import { AccountsManagementView } from "@/components/master/AccountsManagementView";
 
 export default async function ChartOfAccountsPage() {
-  const accounts = await prisma.chartOfAccount.findMany({
-    where: { archived: false },
-    orderBy: [{ isSystem: "desc" }, { name: "asc" }],
-  });
+  const accounts = await getAccounts({ includeArchived: true });
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Chart of Accounts"
         subtitle="Manage foundational ledger accounts governing assets, liabilities, equity, revenues, and expenses."
-        action={{
-          label: "+ New Account",
-          href: "/master/chart-of-accounts/new",
-        }}
       />
 
-      <AccountsTable accounts={accounts} />
+      <AccountsManagementView accounts={accounts} />
     </div>
   );
 }
