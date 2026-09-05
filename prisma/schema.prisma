@@ -1,0 +1,423 @@
+// Prisma schema for Urban Furniture Accounting System.
+// What: Defines all database models, enums, and relations for the entire application.
+// Why: The schema is written in full now (even for modules arriving in Prompt 2-5) so that
+//      a single initial migration creates the complete DB structure. This prevents breaking
+//      schema migrations later when later prompts add pages for these models.
+// Why not alternative: We could add tables incrementally per prompt, but that risks data
+//      loss/incompatible migrations in a shared Neon DB. One clean init migration is safer.
+// Used by: Every server action, page, and API route in the app via the Prisma Client.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+// Role: Exactly 3 roles as per spec. ADMIN = full access; ACCOUNTANT = transactions + master
+// data but no user management; CONTACT_USER = self-service portal (own invoices/bills only).
+enum Role {
+  ADMIN
+  ACCOUNTANT
+  CONTACT_USER
+}
+
+// ContactType: A Contact can be a Customer, Vendor, or both — single table, type field.
+enum ContactType {
+  CUSTOMER
+  VENDOR
+  BOTH
+}
+
+// ProductType: Goods (physical), Service (non-physical), or Combo (bundle).
+enum ProductType {
+  GOODS
+  SERVICE
+  COMBO
+}
+
+// AccountType: Governs which financial statement the account appears on.
+// Balance Sheet: ASSET, LIABILITY, BANK, CASH, CAPITAL
+// P&L: INCOME, EXPENSE, OTHER_EXPENSE
+enum AccountType {
+  ASSET
+  LIABILITY
+  BANK
+  CASH
+  CAPITAL
+  INCOME
+  EXPENSE
+  OTHER_EXPENSE
+}
+
+// JournalType: Controls the default behaviour and icon for each journal.
+enum JournalType {
+  SALES
+  PURCHASE
+  BANK
+  CASH
+}
+
+// AnalyticType: Income budgets track revenue analytic accounts; Expense budgets track cost.
+enum AnalyticType {
+  INCOME
+  EXPENSE
+}
+
+// BudgetStatus: Lifecycle — Draft (editable) → Confirmed (locked) → Revised (replaced by new
+// budget) or Cancelled (dead end).
+enum BudgetStatus {
+  DRAFT
+  CONFIRMED
+  REVISED
+  CANCELLED
+}
+
+// DocStatus: Used for Purchase Orders and Sales Orders.
+enum DocStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+// BillInvoiceStatus: Vendor Bills and Customer Invoices go through this lifecycle.
+enum BillInvoiceStatus {
+  DRAFT
+  CONFIRMED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+// JournalEntryStatus: Double-entry journal entries are drafted then posted.
+enum JournalEntryStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+// PaymentMethod: How money moves — physical cash or bank transfer.
+enum PaymentMethod {
+  CASH
+  BANK
+}
+
+// PaymentDirection: SEND = paying a vendor; RECEIVE = collecting from a customer.
+enum PaymentDirection {
+  SEND
+  RECEIVE
+}
+
+// ─── Core Auth/User Model ─────────────────────────────────────────────────────
+
+// User: Authentication and authorisation record. Linked to a Contact when role = CONTACT_USER.
+// Why: Separating User (auth identity) from Contact (business entity) lets Contacts exist without
+//      portal logins (e.g., walk-in customers), while still allowing auto-provisioning on demand.
+// Why not a single merged model: A vendor might have both a Contact record (for billing) and a
+//      portal login — separating concerns makes future role changes clean.
+// Used by: Auth.js credentials provider, middleware.ts, all role-gated server actions.
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  loginId      String   @unique
+  email        String   @unique
+  passwordHash String
+  role         Role
+  contactId    String?  @unique
+  contact      Contact? @relation(fields: [contactId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── Master Data Models ───────────────────────────────────────────────────────
+
+// Contact: Represents a Customer, Vendor, or Both. Single table — type field differentiates.
+// Why: Using one table with a type enum avoids duplicate fields and lets a business partner
+//      be both customer and vendor without data duplication.
+// Why not separate Customer/Vendor tables: Would need JOIN logic everywhere and make "BOTH"
+//      type awkward to represent.
+// Used by: Purchase Orders, Vendor Bills, Sales Orders, Customer Invoices, Budgets, Payments.
+model Contact {
+  id             String            @id @default(cuid())
+  name           String
+  type           ContactType
+  email          String            @unique
+  phone          String
+  street         String?
+  city           String?
+  state          String?
+  country        String?
+  pincode        String?
+  imageUrl       String?
+  archived       Boolean           @default(false)
+  user           User?
+  purchaseOrders PurchaseOrder[]
+  vendorBills    VendorBill[]
+  salesOrders    SalesOrder[]
+  invoices       CustomerInvoice[]
+  budgets        Budget[]
+  payments       Payment[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
+// Product: Items sold or purchased. Category is a free-text field (distinct values used as
+// dropdown options — no separate Category table per spec decision #1 in DECISIONS.md).
+// Why: Keeps schema lean; a Category table would require a separate migration and admin UI.
+// Why not: A Category table with FK would give referential integrity but costs extra complexity.
+// Used by: Invoice lines, Bill lines, PO lines, SO lines.
+model Product {
+  id         String      @id @default(cuid())
+  name       String
+  type       ProductType
+  category   String
+  salesPrice Decimal     @db.Decimal(15, 2)
+  cost       Decimal     @db.Decimal(15, 2)
+  imageUrl   String?
+  archived   Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+// ChartOfAccount: The master list of ledger accounts for double-entry bookkeeping.
+// isSystem = true marks seeded accounts that must never be deleted (only archived).
+// Why: System accounts like Cash, Bank, Debtors are referenced by seeded Journal records;
+//      deleting them would break the Journal and all future journal entries.
+// Why not: Allowing deletion and adding soft checks would require cascading nullification
+//          of Journal.defaultAccountId — structurally messier.
+// Used by: Journals, JournalItems, and the Chart of Accounts admin pages.
+model ChartOfAccount {
+  id           String        @id @default(cuid())
+  name         String
+  type         AccountType
+  isSystem     Boolean       @default(false)
+  archived     Boolean       @default(false)
+  journals     Journal[]
+  journalItems JournalItem[]
+  createdAt    DateTime      @default(now())
+}
+
+// Journal: A named book of entry (Sales, Purchase, Bank, Cash). Each maps to a default account.
+// Why: Journals are the bridge between business transactions (bills, invoices) and double-entry
+//      accounting. Seeding 4 journals covers the core transaction types out of the box.
+// Why not: Creating journals ad-hoc on every transaction would be messier to track.
+// Used by: JournalEntry records created by Vendor Bills, Customer Invoices, and Payments.
+model Journal {
+  id               String         @id @default(cuid())
+  name             String
+  type             JournalType
+  isSystem         Boolean        @default(false)
+  defaultAccountId String
+  defaultAccount   ChartOfAccount @relation(fields: [defaultAccountId], references: [id])
+  entries          JournalEntry[]
+  createdAt        DateTime       @default(now())
+}
+
+// AnalyticAccount: Cost/profit centres used to track budgets by department or project.
+// Why: Separating analytic from nominal accounts lets management see P&L by cost centre
+//      without polluting the Chart of Accounts with sub-accounts.
+// Why not: Using a sub-account pattern in CoA would couple management reporting tightly
+//          to the statutory chart — harder to maintain separately.
+// Used by: Budgets, POLine, BillLine, SOLine, InvoiceLine (optional analytic tagging).
+model AnalyticAccount {
+  id        String       @id @default(cuid())
+  name      String
+  type      AnalyticType
+  budgets   Budget[]
+  createdAt DateTime     @default(now())
+}
+
+// Budget: A planned financial target linked to an AnalyticAccount and a date range.
+// revisionOfId: self-referential — when Revised, the new budget links back to the old one.
+// Why self-referential: Keeps revision history clean; the old budget shows "revised by" link
+//                       and the new one shows "revision of" link — bidirectional in the UI.
+// Why not: A separate BudgetRevision table would add complexity for a simple 1:1 chain.
+// Used by: Budget list/kanban, budget detail page, and future budget report (Prompt 5).
+model Budget {
+  id                String          @id @default(cuid())
+  name              String
+  periodStart       DateTime
+  periodEnd         DateTime
+  responsibleId     String
+  responsible       Contact         @relation(fields: [responsibleId], references: [id])
+  analyticAccountId String
+  analyticAccount   AnalyticAccount @relation(fields: [analyticAccountId], references: [id])
+  committedAmount   Decimal         @db.Decimal(15, 2)
+  status            BudgetStatus    @default(DRAFT)
+  revisionOfId      String?         @unique
+  revisionOf        Budget?         @relation("BudgetRevision", fields: [revisionOfId], references: [id])
+  revisedBy         Budget?         @relation("BudgetRevision")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+}
+
+// ─── Transaction Models (schema-only; pages arrive in Prompt 2–5) ─────────────
+
+// PurchaseOrder: A commitment to buy goods/services from a vendor before billing.
+// Schema exists now so Prompt 2 can add pages without a new migration.
+model PurchaseOrder {
+  id        String      @id @default(cuid())
+  poNumber  String      @unique
+  vendorId  String
+  vendor    Contact     @relation(fields: [vendorId], references: [id])
+  poDate    DateTime
+  status    DocStatus   @default(DRAFT)
+  lines     POLine[]
+  bills     VendorBill[]
+  createdAt DateTime    @default(now())
+}
+
+// POLine: Individual product line within a Purchase Order.
+model POLine {
+  id                String        @id @default(cuid())
+  purchaseOrderId   String
+  purchaseOrder     PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  productId         String
+  analyticAccountId String?
+  qty               Decimal       @db.Decimal(15, 4)
+  unitPrice         Decimal       @db.Decimal(15, 2)
+}
+
+// VendorBill: The actual invoice received from a vendor; can be linked to a PO.
+model VendorBill {
+  id             String            @id @default(cuid())
+  billNumber     String            @unique
+  vendorId       String
+  vendor         Contact           @relation(fields: [vendorId], references: [id])
+  billReference  String?
+  billDate       DateTime
+  dueDate        DateTime
+  status         BillInvoiceStatus @default(DRAFT)
+  sourcePOId     String?
+  sourcePO       PurchaseOrder?    @relation(fields: [sourcePOId], references: [id])
+  paidAmount     Decimal           @default(0) @db.Decimal(15, 2)
+  journalEntryId String?           @unique
+  lines          BillLine[]
+  payments       Payment[]
+  createdAt      DateTime          @default(now())
+}
+
+// BillLine: Individual product line on a Vendor Bill.
+model BillLine {
+  id                String     @id @default(cuid())
+  vendorBillId      String
+  vendorBill        VendorBill @relation(fields: [vendorBillId], references: [id])
+  productId         String
+  chartOfAccountId  String
+  analyticAccountId String?
+  qty               Decimal    @db.Decimal(15, 4)
+  unitPrice         Decimal    @db.Decimal(15, 2)
+}
+
+// SalesOrder: A commitment to sell goods/services to a customer before invoicing.
+model SalesOrder {
+  id         String            @id @default(cuid())
+  soNumber   String            @unique
+  customerId String
+  customer   Contact           @relation(fields: [customerId], references: [id])
+  soDate     DateTime
+  status     DocStatus         @default(DRAFT)
+  lines      SOLine[]
+  invoices   CustomerInvoice[]
+  createdAt  DateTime          @default(now())
+}
+
+// SOLine: Individual product line within a Sales Order.
+model SOLine {
+  id                String     @id @default(cuid())
+  salesOrderId      String
+  salesOrder        SalesOrder @relation(fields: [salesOrderId], references: [id])
+  productId         String
+  analyticAccountId String?
+  qty               Decimal    @db.Decimal(15, 4)
+  unitPrice         Decimal    @db.Decimal(15, 2)
+}
+
+// CustomerInvoice: The invoice sent to a customer; can be linked to a Sales Order.
+model CustomerInvoice {
+  id               String            @id @default(cuid())
+  invoiceNumber    String            @unique
+  customerId       String
+  customer         Contact           @relation(fields: [customerId], references: [id])
+  invoiceReference String?
+  invoiceDate      DateTime
+  dueDate          DateTime
+  status           BillInvoiceStatus @default(DRAFT)
+  sourceSOId       String?
+  sourceSO         SalesOrder?       @relation(fields: [sourceSOId], references: [id])
+  paidAmount       Decimal           @default(0) @db.Decimal(15, 2)
+  journalEntryId   String?           @unique
+  lines            InvoiceLine[]
+  payments         Payment[]
+  createdAt        DateTime          @default(now())
+}
+
+// InvoiceLine: Individual product line on a Customer Invoice.
+model InvoiceLine {
+  id                String          @id @default(cuid())
+  customerInvoiceId String
+  customerInvoice   CustomerInvoice @relation(fields: [customerInvoiceId], references: [id])
+  productId         String
+  chartOfAccountId  String
+  analyticAccountId String?
+  qty               Decimal         @db.Decimal(15, 4)
+  unitPrice         Decimal         @db.Decimal(15, 2)
+}
+
+// Payment: Records money sent (to vendor) or received (from customer).
+model Payment {
+  id                String            @id @default(cuid())
+  direction         PaymentDirection
+  method            PaymentMethod
+  amount            Decimal           @db.Decimal(15, 2)
+  date              DateTime
+  note              String?
+  contactId         String
+  contact           Contact           @relation(fields: [contactId], references: [id])
+  vendorBillId      String?
+  vendorBill        VendorBill?       @relation(fields: [vendorBillId], references: [id])
+  customerInvoiceId String?
+  customerInvoice   CustomerInvoice?  @relation(fields: [customerInvoiceId], references: [id])
+  journalEntryId    String?           @unique
+  createdAt         DateTime          @default(now())
+}
+
+// JournalEntry: The double-entry bookkeeping record (header + lines = debit must equal credit).
+// Why: The JournalEntry/JournalItem pair is the canonical double-entry ledger structure used
+//      in all major accounting systems (Odoo, QuickBooks, Xero). Every financial transaction
+//      (bill confirm, invoice confirm, payment) creates one JournalEntry with two or more items.
+// Why not: Storing debit/credit on the parent JournalEntry itself would not support entries
+//          with more than 2 legs (e.g., tax-split entries).
+// Used by: Prompt 4/5 server actions that auto-generate entries on confirm.
+model JournalEntry {
+  id             String             @id @default(cuid())
+  journalId      String
+  journal        Journal            @relation(fields: [journalId], references: [id])
+  accountingDate DateTime
+  reference      String?
+  partnerId      String?
+  status         JournalEntryStatus @default(DRAFT)
+  items          JournalItem[]
+  createdAt      DateTime           @default(now())
+}
+
+// JournalItem: One leg of a double-entry. Either debit > 0 or credit > 0, never both.
+// Why: Separate rows for debit and credit legs allow N-legged entries and make trial balance
+//      queries trivial (SUM(debit) - SUM(credit) per account).
+// Why not: Storing both debit and credit on one row with sign convention (positive = debit,
+//          negative = credit) is compact but error-prone for newcomers reading the data.
+model JournalItem {
+  id             String         @id @default(cuid())
+  journalEntryId String
+  journalEntry   JournalEntry   @relation(fields: [journalEntryId], references: [id])
+  accountId      String
+  account        ChartOfAccount @relation(fields: [accountId], references: [id])
+  partnerId      String?
+  debit          Decimal        @default(0) @db.Decimal(15, 2)
+  credit         Decimal        @default(0) @db.Decimal(15, 2)
+}
