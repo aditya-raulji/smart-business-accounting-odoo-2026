@@ -1,12 +1,9 @@
-import { PlaceholderPage } from "@/components/ui/PlaceholderPage";
+// Purchase Payments Redirect Page for Urban Furniture Accounting System.
+// Yeh route purchase payments ko global generic `/payments` page par redirect karta hai.
+// Used by: /purchase/payments route.
 
-export default function VendorPaymentsPage() {
-  return (
-    <PlaceholderPage
-      title="Vendor Payments"
-      subtitle="Outward bank transfers, cheque issuances, and cash disbursements to suppliers."
-      moduleName="Payments"
-      upcomingPrompt="Prompt 2 (Purchase Flow)"
-    />
-  );
+import { redirect } from "next/navigation";
+
+export default function PurchasePaymentsRedirect() {
+  redirect("/payments");
 }
