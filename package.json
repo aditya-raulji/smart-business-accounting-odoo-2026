@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:e2e": "tsx scripts/self_verification_test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

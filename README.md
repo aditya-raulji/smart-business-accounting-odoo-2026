@@ -1,36 +1,92 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Urban Furniture — Accounting System
 
-## Getting Started
+A production-grade, double-entry business accounting web application designed specifically for **Urban Furniture**. Built with **Next.js 15+ (App Router)**, **TypeScript**, **Tailwind CSS**, **Prisma ORM**, **Neon PostgreSQL**, and **Auth.js v5 (NextAuth)**.
 
-First, run the development server:
+---
 
+## 🚀 Key Modules & Capabilities
+
+### 1. Foundation & Master Data (Prompt 1)
+- **Role-Based Access Control (RBAC)**:
+  - `ADMIN`: Full access to company accounting, configuration, and team member provisioning (`/users/new`).
+  - `ACCOUNTANT`: Full operational access to day-to-day books, orders, bills, and journals.
+  - `CONTACT_USER`: Dedicated vendor & customer portal view restricted to personal bills and statements.
+- **Master Data Management**:
+  - **Contacts**: Customers, Vendors, or Both with auto-provisioned `CONTACT_USER` portal credentials.
+  - **Products**: Goods, Services, standard cost and sales price tracking with dynamic categories.
+  - **Chart of Accounts**: Core system accounts (*Cash, Bank, Debtors, Creditors, Capital, Sales Income, Purchase Expense*) locked against destructive modifications.
+  - **Journals**: Sales, Purchase, Bank, and Cash journals with default balancing accounts.
+  - **Analytic Accounts & Budgets**: Departmental cost centers with full lifecycle state machine (`Draft` → `Confirmed` → `Revised` with linked revisions).
+
+### 2. Purchase Flow & Double-Entry Accounting (Prompt 2)
+- **Purchase Orders (PO)**: Sequential auto-numbering (`P00001`), line item valuation, confirmation, and cancellation.
+- **PO → Vendor Bill Conversion**: 1-click conversion copying line items, products, quantities, and rates with duplicate bill prevention.
+- **Fiscal Bill Numbering**: Standard format (`Bill/YYYY/0001`) reset per calendar year.
+- **Automated Journal Entries**:
+  - **Bill Confirmation**: `Debit: Purchase Expense` / `Credit: Creditors Liability` (balanced down to 0.00 paisa).
+  - **Payment Registration**: `Debit: Creditors Liability` / `Credit: Bank or Cash Account`.
+- **Payment Lifecycle**: Support for partial and full payments, real-time `Amount Due` updates, overpayment validation guards, and automatic `PAID` status transition.
+- **Journal Entries Ledger**: Read-only journal entry audit view with line-level debit/credit balance verification.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Framework**: Next.js 16 (App Router, Server Actions)
+- **Language**: TypeScript (Strict typechecking)
+- **Styling**: Tailwind CSS & Lucide Icons (Editorial cream & paper aesthetic)
+- **Database**: Neon PostgreSQL via Prisma ORM
+- **Authentication**: Auth.js v5 (Edge JWT sessions)
+- **Validation**: Zod & React Hook Form
+
+---
+
+## ⚡ Quick Start
+
+### 1. Prerequisites & Installation
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/aditya-raulji/smart-business-accounting-odoo-2026.git
+cd smart-business-accounting-odoo-2026
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Environment Setup
+Configure `.env` with your Neon PostgreSQL connection string:
+```env
+DATABASE_URL="postgresql://user:password@host/neondb?sslmode=require"
+AUTH_SECRET="your-32-character-secret-key"
+NEXTAUTH_URL="http://localhost:3000"
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Database Migration & Seed
+```bash
+npx prisma migrate deploy
+npm run seed  # or npx ts-node prisma/seed.ts
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. Run Development Server
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## 🔐 Bootstrap Credentials
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Role | Login ID | Password | Portal View |
+| :--- | :--- | :--- | :--- |
+| **Admin** | `adminhik5` | `2TI&2RVeHu` | Full Admin & Accountant Access |
+| **Contact User** | *Derived on contact creation* | *Generated temp password* | Vendor / Customer Self-Service Portal |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## 🧪 Automated End-to-End Verification Suite
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Run the full 15-checkpoint verification suite directly against Neon PostgreSQL:
+```bash
+npm run test:e2e
+# or
+npx tsx scripts/self_verification_test.ts
+```
+All 15 test suites verify seed counts, auto-user provisioning, budget revisions, PO numbering, line item copies, double-entry debit/credit ledger equality, partial/full payments, and edge case guards.
