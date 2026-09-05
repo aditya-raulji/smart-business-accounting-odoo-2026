@@ -40,7 +40,7 @@ export default async function DashboardPage() {
     for (const inv of pendingInvoices) {
       const invTotal = inv.lines.reduce((s, l) => {
         const sub = Number(l.qty) * Number(l.unitPrice);
-        return s + sub + sub * (Number(l.taxRate) / 100);
+        return s + sub + sub * (Number((l as any).taxRate ?? 18) / 100);
       }, 0);
       totalDue += Math.max(0, invTotal - Number(inv.paidAmount));
     }

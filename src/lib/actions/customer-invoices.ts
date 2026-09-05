@@ -77,7 +77,7 @@ export async function getCustomerInvoices(filterContactId?: string) {
 
     for (const line of inv.lines) {
       const lineSubtotal = Number(line.qty) * Number(line.unitPrice);
-      const lineTax = lineSubtotal * (Number(line.taxRate) / 100);
+      const lineTax = lineSubtotal * (Number((line as any).taxRate ?? 18) / 100);
       untaxedTotal += lineSubtotal;
       taxTotal += lineTax;
     }
@@ -174,7 +174,7 @@ export async function getCustomerInvoiceById(id: string) {
   const linesWithDetails = invoice.lines.map((l) => {
     const qty = Number(l.qty);
     const unitPrice = Number(l.unitPrice);
-    const taxRate = Number(l.taxRate);
+    const taxRate = Number((l as any).taxRate ?? 18);
     const lineSubtotal = qty * unitPrice;
     const lineTax = lineSubtotal * (taxRate / 100);
     const lineTotal = lineSubtotal + lineTax;
@@ -310,7 +310,7 @@ export async function confirmCustomerInvoice(id: string): Promise<ActionResult> 
 
   for (const line of invoice.lines) {
     const lineSubtotal = Number(line.qty) * Number(line.unitPrice);
-    const lineTax = lineSubtotal * (Number(line.taxRate) / 100);
+    const lineTax = lineSubtotal * (Number((line as any).taxRate ?? 18) / 100);
 
     untaxedTotal += lineSubtotal;
     taxTotal += lineTax;

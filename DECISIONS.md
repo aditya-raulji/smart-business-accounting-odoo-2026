@@ -30,3 +30,25 @@ This document records the architectural and business decisions made during each 
 | **Duplicate Invoice Prevention** | When creating invoice with `sourceSOId`, system queries for any existing invoice where `status !== 'CANCELLED'`. Rejects duplicates with a descriptive error. | Prevents double billing for the same Sales Order commitment. | Allowing multiple partial invoices without order tracking (out of scope for Phase 3; 1:1 SO-to-Invoice matching required). |
 | **Customer Self-Pay Security** | Allowed `CONTACT_USER` access to `/sales/invoices` and `/sales/invoices/[id]`. Partner is locked to logged-in `contactId`, direction is locked to `RECEIVE`. | Enables customer portal self-service for online payments while preventing access to other customers' invoices or admin routes. | Creating a detached external payment portal (rejected: reuses existing authenticated components and server actions). |
 | **Numbering Sequences** | Sales Orders: `S00001` (continuous padded 5-digit).<br>Customer Invoices: `INV/YYYY/0001` (yearly reset, 4-digit padded). | Matches standard ERP formatting conventions and distinguishes sales documents from purchase documents. | Random UUID or database auto-increment ID (rejected: non-compliant with standard accounting invoice numbering). |
+
+---
+
+## Part 4: Accounting Engine Polish
+
+| Decision | Chosen | Rejected alternative | Why rejected |
+|---|---|---|---|
+| **Editing auto-generated entries** | Fully locked, view-only, with a link back to the source document | Allow `Reset to Draft`/edit on any entry, including auto-generated ones | An auto-generated entry's whole point is that it's a mechanical reflection of a Bill/Invoice/Payment. Letting someone hand-edit it would let the books silently disagree with the document that supposedly produced them. If a Bill's amount is wrong, the fix is to correct the Bill (which regenerates its entry), not to hand-edit the entry. |
+| **One Journal per Type** | Enforced uniqueness | Allow multiple Journals of the same Type (e.g. two "Bank" journals for two real bank accounts) | Prompts 2–3's automation was written to look up "the Bank journal" with a single `findFirst`. Supporting multiple would make that lookup ambiguous. |
+| **Budget Achieved Amount** | Computed live on every page view | Denormalize it onto the Budget row, updated whenever a Bill/Invoice is confirmed | Achieved Amount depends on a set of documents across a date range — it would need to be recalculated from multiple trigger points to avoid drifting. Live aggregate query is fast and accurate. |
+| **Manual entry numbering** | Simple `JE-00001` running sequence, editable | Force it to match some external numbering standard | A plain internal sequence is the smallest correct choice, and it's editable in case the accountant wants to key in a reference to a physical voucher. |
+
+---
+
+## Part 5: Reports (Balance Sheet, Profit & Loss, Budget Report)
+
+| Decision | Chosen | Rejected alternative | Why rejected |
+|---|---|---|---|
+| **Making the Balance Sheet balance** | Add a synthetic "Retained Earnings" line under Capital, equal to cumulative Net Income | Do nothing and let Assets ≠ Liabilities + Capital | Systems without year-end closing entries need a synthetic line representing accumulated profit sitting in Equity; otherwise the fundamental accounting equation won't hold and the balance sheet won't balance. |
+| **PDF export** | Browser `window.print()` + print stylesheet | A PDF-generation library (`@react-pdf/renderer`, Puppeteer) | A library adds a large dependency and separate rendering pipeline. A print CSS stylesheet combined with `window.print()` is a clean, built-in solution supported by all browsers ("Print → Save as PDF"). |
+| **Report computation** | Query and sum `JournalItem`s live, every time a report is opened | Maintain running account-balance totals updated on every posting | Live query is fast at this data volume and can never drift from posted ledger items. |
+| **P&L period vs Balance Sheet period** | P&L = selected year only; Balance Sheet = cumulative up to that year's end | Make both cumulative, or both year-only | Income/Expense accounts are temporary (reset each period), while Asset/Liability/Capital accounts are permanent (carry forward). This reflects standard double-entry accounting principles. |
