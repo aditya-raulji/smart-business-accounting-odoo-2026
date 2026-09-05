@@ -1,15 +1,8 @@
 // Sidebar navigation component for Urban Furniture Accounting System.
-// What: Renders the full sidebar nav with grouped links (Dashboard, Sales, Purchase, Accounting,
-//       Reports) for ADMIN/ACCOUNTANT, or a single restricted view for CONTACT_USER. Highlights
-//       the active route.
-// Why: The sidebar is the primary navigation frame for all authenticated users. Making it
-//      role-aware here (instead of per-page) means adding a new role restriction requires
-//      changing one file, not every page. Using Next.js usePathname() for active link detection
-//      gives real-time highlight without any additional state.
-// Why not: A flat list of all links with conditional CSS hiding per role would leak route
-//          awareness to the DOM even for users who can't access those routes — better to not
-//          render them at all.
-// Used by: (dashboard)/layout.tsx which wraps every authenticated page.
+// Yeh component left-hand navigation sidebar render karta hai role-based filtering ke saath.
+// ADMIN & ACCOUNTANT Nav: Full access to Dashboard, Sales, Purchase, Accounting, Reports.
+// CONTACT_USER Nav: Restricted view with access to Portal Dashboard and My Vendor Bills list (/purchase/bills).
+// Used by: (dashboard)/layout.tsx wrapping all dashboard views.
 
 "use client";
 
@@ -46,7 +39,7 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// Full navigation structure per spec §4 — matches the approved wireframe exactly.
+// Full navigation structure per spec §4
 const ADMIN_ACCOUNTANT_NAV: NavGroup[] = [
   {
     group: "Dashboard",
@@ -67,7 +60,7 @@ const ADMIN_ACCOUNTANT_NAV: NavGroup[] = [
     items: [
       { label: "Purchase Orders", href: "/purchase/orders", icon: Package },
       { label: "Vendor Bills", href: "/purchase/bills", icon: FileText },
-      { label: "Payments", href: "/purchase/payments", icon: Wallet },
+      { label: "Payments", href: "/payments", icon: Wallet },
     ],
   },
   {
@@ -92,12 +85,13 @@ const ADMIN_ACCOUNTANT_NAV: NavGroup[] = [
   },
 ];
 
-// Restricted nav for CONTACT_USER — only their own invoices/bills view.
+// Restricted nav for CONTACT_USER — vendor/customer self-service portal
 const CONTACT_USER_NAV: NavGroup[] = [
   {
-    group: "",
+    group: "Portal",
     items: [
-      { label: "My Invoices & Bills", href: "/dashboard", icon: Receipt },
+      { label: "My Overview", href: "/dashboard", icon: LayoutDashboard },
+      { label: "My Vendor Bills", href: "/purchase/bills", icon: FileText },
     ],
   },
 ];
@@ -111,8 +105,6 @@ export function Sidebar({ role, userName }: SidebarProps) {
   const pathname = usePathname();
   const nav = role === "CONTACT_USER" ? CONTACT_USER_NAV : ADMIN_ACCOUNTANT_NAV;
 
-  // isActive: marks a link active if the current pathname starts with its href,
-  // with a special case for /dashboard to avoid matching /dashboard/* as active on child pages.
   function isActive(href: string): boolean {
     if (href === "/dashboard") return pathname === "/dashboard";
     return pathname.startsWith(href);

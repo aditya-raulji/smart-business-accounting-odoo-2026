@@ -1,12 +1,7 @@
 // Select UI primitive for Urban Furniture Accounting System.
-// What: A styled <select> element with label, error display, and forwardRef for react-hook-form.
-// Why: Native <select> elements are used instead of a custom dropdown to avoid keyboard-trap
-//      focus management complexity and accessibility work that a custom dropdown requires.
-//      The styled wrapper matches the Input primitive visually.
-// Why not: A custom popover-based dropdown (like Radix Select) would offer more styling control
-//          but adds significant complexity and bundle size for a form that works fine with native
-//          semantics in this context.
-// Used by: Contact type, product type, account type, journal type, role, and budget status forms.
+// What: A styled <select> element with label, error display, and forwardRef for forms.
+// Enhanced Support: Supports both `options` prop array (Phase 1) and custom `children` <option> elements (Phase 2).
+// Used by: Contact type, product type, account type, journal type, role, PO form, Vendor Bill form, and payment modal.
 
 "use client";
 
@@ -19,7 +14,8 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   helperText?: string;
   wrapperClassName?: string;
   placeholder?: string;
-  options: { value: string; label: string }[];
+  options?: { value: string; label: string }[];
+  children?: React.ReactNode;
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
@@ -33,6 +29,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
       options,
       placeholder,
       id,
+      children,
       ...props
     },
     ref
@@ -69,11 +66,13 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
               {placeholder}
             </option>
           )}
-          {options.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
+          {options
+            ? options.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))
+            : children}
         </select>
         {helperText && !error && (
           <p className="text-[11px] text-[#3D3A36]">{helperText}</p>
