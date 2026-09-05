@@ -8,7 +8,7 @@
 //          and updated in 6+ places.
 // Used by: DataTable cells for invoice status, budget status, order status.
 
-type BadgeVariant =
+export type BadgeVariant =
   | "paid"
   | "pending"
   | "overdue"
@@ -18,11 +18,17 @@ type BadgeVariant =
   | "cancelled"
   | "partially_paid"
   | "posted"
+  | "success"
+  | "danger"
+  | "warning"
+  | "primary"
+  | "info"
   | "default";
 
-interface BadgeProps {
+export interface BadgeProps {
   variant?: BadgeVariant;
-  label: string;
+  label?: string;
+  children?: React.ReactNode;
   className?: string;
 }
 
@@ -36,21 +42,26 @@ const variantStyles: Record<BadgeVariant, string> = {
   draft: "bg-[#E5DED2] text-[#3D3A36]",
   revised: "bg-[#E5DED2] text-[#3D3A36]",
   cancelled: "bg-[#D4CCC0] text-[#3D3A36] line-through",
+  success: "bg-emerald-100 text-emerald-800 border border-emerald-300",
+  danger: "bg-red-100 text-red-800 border border-red-300",
+  warning: "bg-amber-100 text-amber-800 border border-amber-300",
+  primary: "bg-blue-100 text-blue-800 border border-blue-300",
+  info: "bg-cyan-100 text-cyan-800 border border-cyan-300",
   default: "bg-[#E5DED2] text-[#3D3A36]",
 };
 
-export function Badge({ variant = "default", label, className = "" }: BadgeProps) {
+export function Badge({ variant = "default", label, children, className = "" }: BadgeProps) {
   return (
     <span
       className={[
         "inline-flex items-center px-2 py-0.5",
         "text-[11px] font-semibold uppercase tracking-[1.5px]",
         "rounded-sm",
-        variantStyles[variant],
+        variantStyles[variant] || variantStyles.default,
         className,
       ].join(" ")}
     >
-      {label}
+      {children ?? label}
     </span>
   );
 }
