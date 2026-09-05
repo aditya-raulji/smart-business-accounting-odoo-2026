@@ -116,3 +116,41 @@ table {
 .sidebar-link-active svg {
   color: var(--paper);
 }
+
+/* ── Print Stylesheet for Financial Statements ────────────────────────────── */
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .no-print,
+  aside,
+  nav,
+  header {
+    display: none !important;
+  }
+
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg,
+  .shadow-2xl {
+    box-shadow: none !important;
+  }
+
+  table {
+    page-break-inside: avoid;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+}
+
