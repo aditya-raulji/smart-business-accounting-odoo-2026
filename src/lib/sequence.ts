@@ -76,3 +76,70 @@ export async function nextBillNumber(): Promise<string> {
   // Zero-pad to 4 digits (e.g. Bill/2026/0002)
   return `${prefix}${String(nextNum).padStart(4, "0")}`;
 }
+
+/**
+ * nextSoNumber: Sales Order ke liye sequential number generate karta hai.
+ * Format: S00001, S00002, S00003... (S prefix ke saath 5-digit zero padded running number, never resets).
+ * Why: Spec §3 requires S00001 format mirroring PO numbering.
+ * Why not: Auto-increment DB id exposes internal counts and lacks the 'S' enterprise document prefix.
+ * Used by: Sales Order creation action (lib/actions/sales-orders.ts).
+ */
+export async function nextSoNumber(): Promise<string> {
+  const lastSo = await prisma.salesOrder.findFirst({
+    where: {
+      soNumber: {
+        startsWith: "S",
+      },
+    },
+    orderBy: {
+      soNumber: "desc",
+    },
+    select: {
+      soNumber: true,
+    },
+  });
+
+  if (!lastSo || !lastSo.soNumber) {
+    return "S00001";
+  }
+
+  const numericPart = parseInt(lastSo.soNumber.slice(1), 10);
+  const nextNum = isNaN(numericPart) ? 1 : numericPart + 1;
+
+  return `S${String(nextNum).padStart(5, "0")}`;
+}
+
+/**
+ * nextInvoiceNumber: Customer Invoice ke liye yearly resetting sequential invoice number generate karta hai.
+ * Format: INV/2026/0001, INV/2026/0002... (Prefix INV/ + current year + 4-digit zero padded number).
+ * Why: Spec §3 mandates fiscal year prefix with 4-digit running sequence, resetting on Jan 1.
+ * Why not: A global non-resetting number makes statutory year-end tax audits more complex than yearly-resetting books.
+ * Used by: Customer Invoice creation action (lib/actions/customer-invoices.ts).
+ */
+export async function nextInvoiceNumber(): Promise<string> {
+  const currentYear = new Date().getFullYear();
+  const prefix = `INV/${currentYear}/`;
+
+  const lastInvoice = await prisma.customerInvoice.findFirst({
+    where: {
+      invoiceNumber: {
+        startsWith: prefix,
+      },
+    },
+    orderBy: {
+      invoiceNumber: "desc",
+    },
+    select: {
+      invoiceNumber: true,
+    },
+  });
+
+  if (!lastInvoice || !lastInvoice.invoiceNumber) {
+    return `${prefix}0001`;
+  }
+
+  const numericPart = parseInt(lastInvoice.invoiceNumber.replace(prefix, ""), 10);
+  const nextNum = isNaN(numericPart) ? 1 : numericPart + 1;
+
+  return `${prefix}${String(nextNum).padStart(4, "0")}`;
+}

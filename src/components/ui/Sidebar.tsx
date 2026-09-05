@@ -100,6 +100,7 @@ const CONTACT_USER_NAV: NavGroup[] = [
     group: "Portal",
     items: [
       { label: "My Overview", href: "/dashboard", icon: LayoutDashboard },
+      { label: "My Invoices", href: "/sales/invoices", icon: Receipt },
       { label: "My Vendor Bills", href: "/purchase/bills", icon: FileText },
     ],
   },

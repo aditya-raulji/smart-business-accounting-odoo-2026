@@ -44,16 +44,20 @@ export default auth(async function middleware(req: NextRequest & { auth: any }) 
   const role = session.user.role;
 
   // CONTACT_USER Scoping Rule (§6)
-  // Keval /dashboard, /purchase/bills (list) aur /purchase/bills/[id] (detail view) ki ijazat hai.
-  // /purchase/bills/new, /purchase/orders, /payments, /accounting, /master blocked hain.
+  // Vendors: /purchase/bills (list) & /purchase/bills/[id]
+  // Customers: /sales/invoices (list) & /sales/invoices/[id]
+  // Blocked: /purchase/bills/new, /sales/invoices/new, /purchase/orders, /sales/orders, /payments, /accounting, /master
   if (role === "CONTACT_USER") {
     const isDashboard = pathname.startsWith("/dashboard");
     const isMyRoute = pathname.startsWith("/my-");
     const isVendorBillView =
       pathname === "/purchase/bills" ||
       (pathname.startsWith("/purchase/bills/") && pathname !== "/purchase/bills/new");
+    const isCustomerInvoiceView =
+      pathname === "/sales/invoices" ||
+      (pathname.startsWith("/sales/invoices/") && pathname !== "/sales/invoices/new");
 
-    if (!isDashboard && !isMyRoute && !isVendorBillView) {
+    if (!isDashboard && !isMyRoute && !isVendorBillView && !isCustomerInvoiceView) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
     return NextResponse.next();

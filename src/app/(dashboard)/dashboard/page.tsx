@@ -26,6 +26,25 @@ export default async function DashboardPage() {
       ? await prisma.contact.findUnique({ where: { id: contactId } })
       : null;
 
+    const pendingInvoices = contactId
+      ? await prisma.customerInvoice.findMany({
+          where: {
+            customerId: contactId,
+            status: { in: ["CONFIRMED", "PARTIALLY_PAID"] },
+          },
+          include: { lines: true },
+        })
+      : [];
+
+    let totalDue = 0;
+    for (const inv of pendingInvoices) {
+      const invTotal = inv.lines.reduce((s, l) => {
+        const sub = Number(l.qty) * Number(l.unitPrice);
+        return s + sub + sub * (Number(l.taxRate) / 100);
+      }, 0);
+      totalDue += Math.max(0, invTotal - Number(inv.paidAmount));
+    }
+
     return (
       <div className="space-y-6">
         <PageHeader
@@ -67,12 +86,32 @@ export default async function DashboardPage() {
               Invoices & Transaction Status
             </h3>
             <p className="text-xs text-[#3D3A36] leading-relaxed mb-4">
-              Your billing and transaction statements will be listed here as sales orders and vendor bills
-              are confirmed. All payments and receipts are tracked with real-time audit lineage.
+              Your billing and transaction statements are tracked here with real-time audit lineage.
             </p>
-            <div className="p-4 rounded border border-dashed border-[#D4CCC0] text-center text-xs text-[#3D3A36]">
-              No pending invoices or outstanding bills found for your account.
-            </div>
+            {pendingInvoices.length > 0 ? (
+              <div className="p-4 rounded bg-[#FFF8EE] border border-[#E2D9CC] space-y-3">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#78716C]">Outstanding Invoices:</span>
+                  <span className="font-bold text-[#171717]">{pendingInvoices.length}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#78716C]">Total Amount Due:</span>
+                  <span className="font-bold text-[#B91C1C] text-sm">
+                    ₹{totalDue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <Link
+                  href="/sales/invoices"
+                  className="inline-flex items-center justify-center w-full px-3 py-2 bg-[#B91C1C] text-white text-xs font-semibold rounded hover:bg-[#991B1B] transition-colors"
+                >
+                  View & Pay Invoices →
+                </Link>
+              </div>
+            ) : (
+              <div className="p-4 rounded border border-dashed border-[#D4CCC0] text-center text-xs text-[#3D3A36]">
+                No pending invoices or outstanding balances found for your account.
+              </div>
+            )}
           </Card>
         </div>
       </div>
