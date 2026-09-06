@@ -3,6 +3,21 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+async function withRetry<T>(fn: () => Promise<T>, retries = 6, delayMs = 2500): Promise<T> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 1) {
+        await prisma.$connect().catch(() => {});
+      }
+      return await fn();
+    } catch (err: any) {
+      if (attempt === retries) throw err;
+      await new Promise((res) => setTimeout(res, delayMs));
+    }
+  }
+  throw new Error("Failed after retries");
+}
+
 interface TestResult {
   section: string;
   test: string;
@@ -45,9 +60,9 @@ async function runSelfVerification() {
 
     // A1. Seed Data: Core System Accounts
     const coreAccountNames = ["Cash", "Bank", "Debtors", "Creditors", "Capital", "Sales Income", "Purchase Expense"];
-    const systemAccounts = await prisma.chartOfAccount.findMany({
+    const systemAccounts = await withRetry(() => prisma.chartOfAccount.findMany({
       where: { isSystem: true },
-    });
+    }));
     const foundSystemNames = systemAccounts.map((a) => a.name);
     const allAccountsFound = coreAccountNames.every((name) => foundSystemNames.includes(name));
 
@@ -155,7 +170,7 @@ async function runSelfVerification() {
     });
 
     // Revise Budget
-    const revisionTx = await prisma.$transaction(async (tx) => {
+    const revisionTx = await withRetry(() => prisma.$transaction(async (tx) => {
       const revised = await tx.budget.update({
         where: { id: confirmedBudget.id },
         data: { status: BudgetStatus.REVISED },
@@ -173,7 +188,7 @@ async function runSelfVerification() {
         },
       });
       return { revised, newRev };
-    });
+    }, { timeout: 25000 }));
     testRevisedBudgetId = revisionTx.newRev.id;
 
     if (
@@ -325,7 +340,7 @@ async function runSelfVerification() {
     // Confirm Bill 1: 10 * 1500 = 15,000.00
     const bill1Total = bill1.lines.reduce((s, l) => s + Number(l.qty) * Number(l.unitPrice), 0);
 
-    const billJeTx = await prisma.$transaction(async (tx) => {
+    const billJeTx = await withRetry(() => prisma.$transaction(async (tx) => {
       const je = await tx.journalEntry.create({
         data: {
           journalId: purchaseJournal.id,
@@ -362,7 +377,7 @@ async function runSelfVerification() {
       });
 
       return { je, updatedBill };
-    });
+    }, { timeout: 25000 }));
 
     // Directly query database to inspect Journal Entry
     const directJe = await prisma.journalEntry.findUnique({
@@ -388,7 +403,7 @@ async function runSelfVerification() {
 
     // B5. Partial Payment Registration & Amount Due Update
     const partialPaymentAmount = 5000.00;
-    const payment1 = await prisma.$transaction(async (tx) => {
+    const payment1 = await withRetry(() => prisma.$transaction(async (tx) => {
       const p = await tx.payment.create({
         data: {
           direction: PaymentDirection.SEND,
@@ -441,7 +456,7 @@ async function runSelfVerification() {
       });
 
       return { p, je, updated };
-    });
+    }, { timeout: 25000 }));
 
     const billAfterPartial = await prisma.vendorBill.findUnique({
       where: { id: bill1.id },

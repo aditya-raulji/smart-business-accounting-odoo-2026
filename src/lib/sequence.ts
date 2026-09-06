@@ -5,25 +5,43 @@
 
 import { prisma } from "@/lib/prisma";
 
+async function withRetry<T>(fn: () => Promise<T>, retries = 6, delayMs = 2500): Promise<T> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 1) {
+        await prisma.$connect().catch(() => {});
+      }
+      return await fn();
+    } catch (err: any) {
+      if (attempt === retries) throw err;
+      await new Promise((res) => setTimeout(res, delayMs));
+    }
+  }
+  throw new Error("Failed after retries");
+}
+
 /**
  * nextPoNumber: Purchase Order ke liye next sequential number generate karta hai.
  * Format: P00001, P00002, P00003... (P prefix ke saath 5-digit zero padded number).
  * Used by: Purchase Order creation action (createPurchaseOrder).
  */
 export async function nextPoNumber(): Promise<string> {
-  const lastPo = await prisma.purchaseOrder.findFirst({
-    where: {
-      poNumber: {
-        startsWith: "P",
+  const lastPo = await withRetry(() =>
+    prisma.purchaseOrder.findFirst({
+      where: {
+        poNumber: {
+          startsWith: "P",
+          not: { startsWith: "PO/" },
+        },
       },
-    },
-    orderBy: {
-      poNumber: "desc",
-    },
-    select: {
-      poNumber: true,
-    },
-  });
+      orderBy: {
+        createdAt: "desc",
+      },
+      select: {
+        poNumber: true,
+      },
+    })
+  );
 
   if (!lastPo || !lastPo.poNumber) {
     return "P00001";
@@ -70,14 +88,17 @@ export async function nextBillNumber(): Promise<string> {
 
 /**
  * nextSoNumber: Sales Order ke liye sequential number generate karta hai.
- * Format: S00001, S00002, S00003... (S prefix ke saath 5-digit zero padded running number, never resets).
+ * Format: SO/2026/00001, SO/2026/00002...
  * Used by: Sales Order creation action (lib/actions/sales-orders.ts).
  */
 export async function nextSoNumber(): Promise<string> {
+  const currentYear = new Date().getFullYear();
+  const prefix = `SO/${currentYear}/`;
+
   const lastSo = await prisma.salesOrder.findFirst({
     where: {
       soNumber: {
-        startsWith: "S",
+        startsWith: prefix,
       },
     },
     orderBy: {
@@ -89,13 +110,21 @@ export async function nextSoNumber(): Promise<string> {
   });
 
   if (!lastSo || !lastSo.soNumber) {
-    return "S00001";
+    // Fallback: check legacy "S" format
+    const legacySo = await prisma.salesOrder.findFirst({
+      where: { soNumber: { startsWith: "S" } },
+      orderBy: { soNumber: "desc" },
+    });
+    if (!legacySo) return `${prefix}00001`;
+    const num = parseInt(legacySo.soNumber.replace(/^S0*/, ""), 10);
+    const nextNum = isNaN(num) ? 1 : num + 1;
+    return `S${String(nextNum).padStart(5, "0")}`;
   }
 
-  const numericPart = parseInt(lastSo.soNumber.slice(1), 10);
+  const numericPart = parseInt(lastSo.soNumber.replace(prefix, ""), 10);
   const nextNum = isNaN(numericPart) ? 1 : numericPart + 1;
 
-  return `S${String(nextNum).padStart(5, "0")}`;
+  return `${prefix}${String(nextNum).padStart(5, "0")}`;
 }
 
 /**
