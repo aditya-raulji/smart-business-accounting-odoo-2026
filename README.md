@@ -70,8 +70,8 @@ npm install
 ### 2. Environment Setup
 Configure `.env` with your Neon PostgreSQL connection string:
 ```env
-DATABASE_URL="postgresql://neondb_owner:npg_5QiFcqAzRY1E@ep-fancy-mode-ayco0rmv.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
-AUTH_SECRET="urban-furniture-super-secret-key-32chars"
+DATABASE_URL=""
+AUTH_SECRET=""
 NEXTAUTH_URL="http://localhost:3000"
 ```
 
